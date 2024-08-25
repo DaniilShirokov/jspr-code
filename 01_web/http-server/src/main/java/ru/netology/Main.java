@@ -24,7 +24,6 @@ public class Main {
           final var parts = requestLine.split(" ");
 
           if (parts.length != 3) {
-            // just close socket
             continue;
           }
 
