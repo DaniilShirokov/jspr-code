@@ -1,105 +1,84 @@
 package ru.netology;
 
-import java.io.BufferedOutputStream;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class Server {
-    private int port;
-    private ExecutorService executorService;
-    private final List<String> validPaths = List.of(
+
+class Server {
+    private static final List<String> VALID_PATHS = List.of(
             "/index.html", "/spring.svg", "/spring.png", "/resources.html",
             "/styles.css", "/app.js", "/links.html", "/forms.html",
             "/classic.html", "/events.html", "/events.js"
     );
 
-    public Server(int port, int pool) {
-        this.port = port;
-        this.executorService = Executors.newFixedThreadPool(pool);
+    private final ExecutorService executorService;
+    private final Map<String, Map<String, Handler>> handlers;
+
+    public Server() {
+        this.executorService = Executors.newFixedThreadPool(64);
+        this.handlers = new ConcurrentHashMap<>();
     }
 
-    public void start() {
-         try(final var serverSocket = new ServerSocket(port)) {
-             System.out.println("Server is running on port " + port);
-             while (true) {
-                 var socket = serverSocket.accept(); // ждет подключения
-                 executorService.submit(() -> handleConnection(socket)); // обрабатывает соединение в потоке из пула
-             }
-         } catch (IOException e) {
-             e.printStackTrace();
-         } finally {
-             executorService.shutdown(); // завершает работу пула потоков
-         }
-    }
-
-    private void handleConnection(Socket socket) {
-        try (
-                final var in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                final var out = new BufferedOutputStream(socket.getOutputStream())
-        ) {
-            final var requestLine = in.readLine();
-            final var parts = requestLine.split(" ");
-
-            if (parts.length != 3) {
-                return; // некорректный запрос, закрываем соединение
+    public void start(int port) {
+        try (var serverSocket = new ServerSocket(port)) {
+            System.out.println("Сервер запущен на порту: " + port);
+            while (true) {
+                var socket = serverSocket.accept();
+                executorService.submit(() -> handleClient(socket));
             }
-
-            final var path = parts[1];
-            if (!validPaths.contains(path)) {
-                out.write((
-                        "HTTP/1.1 404 Not Found\r\n" +
-                                "Content-Length: 0\r\n" +
-                                "Connection: close\r\n" +
-                                "\r\n"
-                ).getBytes());
-                out.flush();
-                return; // не удалось найти ресурс
-            }
-
-            final var filePath = Path.of("F:\\Work\\JavaNetology\\jspr-code\\01_web\\http-server\\public", path);
-            final var mimeType = Files.probeContentType(filePath);
-
-            // специальный случай для classic.html
-            if (path.equals("/classic.html")) {
-                final var template = Files.readString(filePath);
-                final var content = template.replace(
-                        "{time}",
-                        LocalDateTime.now().toString()
-                ).getBytes();
-                out.write((
-                        "HTTP/1.1 200 OK\r\n" +
-                                "Content-Type: " + mimeType + "\r\n" +
-                                "Content-Length: " + content.length + "\r\n" +
-                                "Connection: close\r\n" +
-                                "\r\n"
-                ).getBytes());
-                out.write(content);
-                out.flush();
-                return;
-            }
-
-            final var length = Files.size(filePath);
-            out.write((
-                    "HTTP/1.1 200 OK\r\n" +
-                            "Content-Type: " + mimeType + "\r\n" +
-                            "Content-Length: " + length + "\r\n" +
-                            "Connection: close\r\n" +
-                            "\r\n"
-            ).getBytes());
-            Files.copy(filePath, out);
-            out.flush();
         } catch (IOException e) {
             e.printStackTrace();
+        } finally {
+            executorService.shutdown();
         }
+    }
 
+    public void addHandler(String method, String path, Handler handler) {
+        handlers.computeIfAbsent(method, k -> new ConcurrentHashMap<>()).put(path, handler);
+    }
+
+    private void handleClient(Socket socket) {
+        try (var in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+             var out = new BufferedOutputStream(socket.getOutputStream())) {
+
+            String requestLine = in.readLine();
+            StringBuilder headers = new StringBuilder();
+            String line;
+
+            while (!(line = in.readLine()).isEmpty()) {
+                headers.append(line).append("\r\n");
+            }
+
+            String body = in.toString();
+            Request request = new Request(requestLine, headers.toString(), body);
+
+            String method = request.getMethod();
+            String path = request.getPath();
+
+            Handler handler = handlers.getOrDefault(method, Map.of()).get(path);
+            if (handler != null) {
+                handler.handle(request, out);
+            } else {
+
+                out.write(("HTTP/1.1 404 Not Found\r\n" +
+                        "Content-Length: 0\r\n" +
+                        "Connection: close\r\n\r\n").getBytes());
+                out.flush();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            try {
+                socket.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
     }
 }
