@@ -3,7 +3,6 @@ package ru.netology;
 public class NewMain {
     public static void main(String[] args) {
         final var server = new Server();
-        server.start(9999);  // Порт 9999
 
         // Добавление обработчиков
         server.addHandler("GET", "/messages", (request, responseStream) -> {
@@ -24,5 +23,7 @@ public class NewMain {
                     "\r\n").getBytes());
             responseStream.flush();
         });
+
+        server.start(9999);  // Порт 9999
     }
 }
