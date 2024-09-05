@@ -1,21 +1,33 @@
 package ru.netology;
 
+import org.apache.http.NameValuePair;
+
+import java.util.List;
+
 public class NewMain {
     public static void main(String[] args) {
         final var server = new Server();
 
         // Добавление обработчиков
+//        server.addHandler("GET", "/messages", (request, responseStream) -> {
+//            String responseBody = "{\"messages\": [\"Hello, World!\"]}";
+//            responseStream.write(("HTTP/1.1 200 OK\r\n" +
+//                    "Content-Type: application/json\r\n" +
+//                    "Content-Length: " + responseBody.length() + "\r\n" +
+//                    "Connection: close\r\n" +
+//                    "\r\n").getBytes());
+//            responseStream.write(responseBody.getBytes());
+//            responseStream.flush();
+//        });
         server.addHandler("GET", "/messages", (request, responseStream) -> {
-            String responseBody = "{\"messages\": [\"Hello, World!\"]}";
+            List<NameValuePair> lastValue = request.getQueryParam("last");
+            String responseBody = "You have sent a GET request!";
             responseStream.write(("HTTP/1.1 200 OK\r\n" +
-                    "Content-Type: application/json\r\n" +
                     "Content-Length: " + responseBody.length() + "\r\n" +
-                    "Connection: close\r\n" +
-                    "\r\n").getBytes());
+                    "Connection: close\r\n\r\n").getBytes());
             responseStream.write(responseBody.getBytes());
             responseStream.flush();
         });
-
         server.addHandler("POST", "/messages", (request, responseStream) -> {
             // Здесь вы можете читать из request.getBody() и обрабатывать данные
             responseStream.write(("HTTP/1.1 200 OK\r\n" +

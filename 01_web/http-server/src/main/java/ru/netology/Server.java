@@ -54,7 +54,8 @@ class Server {
              var path = parts[1];
              var headers = new HashMap<String, String>();
 
-            // Чтение заголовков
+             var newPath = path.contains("?") ? path.substring(0, path.indexOf("?")) : path;
+
             String headerLine;
             while (!(headerLine = readLine(in)).isEmpty()) {
                 var headerParts = headerLine.split(": ", 2);
@@ -63,18 +64,15 @@ class Server {
                 }
             }
 
-            // Чтение тела, если есть
             InputStream body = null;
             int contentLength = Integer.parseInt(headers.getOrDefault("Content-Length", "0"));
             if (contentLength > 0) {
                 body = new ByteArrayInputStream(in.readNBytes(contentLength));
             }
 
-            // Создание объекта Request
             Request request = new Request(method, path, headers, body);
 
-            // Поиск и вызов хендлера
-            Handler handler = handlers.getOrDefault(method, new HashMap<>()).get(path);
+            Handler handler = handlers.getOrDefault(method, new HashMap<>()).get(newPath);
             if (handler != null) {
                 handler.handle(request, out);
             } else {
